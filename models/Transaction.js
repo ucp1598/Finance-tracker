@@ -9,6 +9,8 @@ const transactionSchema = new mongoose.Schema({
     required: true
   },
   mode: { type: String }, // GPay UPI, NEFT, Cash, etc.
+  paymentMethod: { type: String }, // e.g., UPI, SBI 8359
+  paymentApp: { type: String }, // e.g., GPay, CRED
   payee: { type: String, required: true }, // "From" for income, "To" for expenses
   expenseType: { type: String }, // Food, Essentials, Travel, Investment, etc.
   needsWants: { 
@@ -29,7 +31,7 @@ const transactionSchema = new mongoose.Schema({
   creditCard: { type: mongoose.Schema.Types.ObjectId, ref: 'CreditCard' },
 
   // User reference - required
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 });
 
 /* Monthly summary calculation */
@@ -67,16 +69,15 @@ transactionSchema.statics.getMonthlySummary = async function (userId, month, yea
     }
   });
 
-  // Add savings transactions to 'Savings' category (but don't double count investments)
+  // Add savings transactions to 'Savings' category
   expensesByNeedsWants.Savings += totalSavings;
-
-  // DON'T add investments twice - they're already counted in expenses with needsWants: 'Invested'
 
   return {
     totalIncome,
     totalExpenses,
     totalSavings,
-    totalInvestments: expensesByNeedsWants.Invested,
+    // We keep totalInvestments here for record-keeping, even if we merge it in goals below
+    totalInvestments: expensesByNeedsWants.Invested, 
     creditCardPayments: totalCCPayments,
     netFlow: totalIncome - totalExpenses,
     income,
@@ -85,11 +86,20 @@ transactionSchema.statics.getMonthlySummary = async function (userId, month, yea
     ccPayments,
     expensesByType,
     expensesByNeedsWants,
+    
+    // UPDATED GOAL PROGRESS LOGIC
     goalProgress: {
       needs: { amount: expensesByNeedsWants.Needs, target: totalIncome * 0.40 },
       wants: { amount: expensesByNeedsWants.Wants, target: totalIncome * 0.20 },
-      savings: { amount: expensesByNeedsWants.Savings, target: totalIncome * 0.10 },
-      invested: { amount: expensesByNeedsWants.Invested, target: totalIncome * 0.30 }
+      
+      // MERGED: Savings now includes "Invested" amounts and targets 40% of income
+      savings: { 
+        amount: expensesByNeedsWants.Savings + (expensesByNeedsWants.Invested || 0), 
+        target: totalIncome * 0.40 
+      },
+      
+      // ZEROED OUT: Kept as 0 to prevent frontend errors if it expects this key
+      invested: { amount: 0, target: 0 } 
     }
   };
 };

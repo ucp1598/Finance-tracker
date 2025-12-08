@@ -3,6 +3,11 @@ const mongoose = require('mongoose');
 const router = express.Router();
 const Transaction = require('../models/Transaction');
 
+// Utility to escape regex special characters
+const escapeRegex = (text) => {
+  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+};
+
 /* CREATE */
 router.post('/add', async (req, res) => {
   try {
@@ -47,24 +52,29 @@ router.get('/search/:userId', async (req, res) => {
   try {
     const { 
       search, category, expenseType, type, mode, payee,
-      startDate, endDate, minAmount, maxAmount,
+      paymentMethod, paymentApp, startDate, endDate, minAmount, maxAmount,
       needsWants, limit = 100
     } = req.query;
 
     let query = { user: req.params.userId };
 
     if (search && search.trim()) {
+      const searchRegex = new RegExp(escapeRegex(search.trim()), 'i');
       query.$or = [
-        { payee: { $regex: search.trim(), $options: 'i' } },
-        { remarks: { $regex: search.trim(), $options: 'i' } },
-        { expenseType: { $regex: search.trim(), $options: 'i' } }
+        { payee: searchRegex },
+        { remarks: searchRegex },
+        { expenseType: searchRegex },
+        { paymentMethod: searchRegex },
+        { paymentApp: searchRegex }
       ];
     }
     if (category) query.category = category;
     if (expenseType) query.expenseType = expenseType;
     if (type) query.type = type;
-    if (mode) query.mode = { $regex: mode, $options: 'i' };
-    if (payee && !search) query.payee = { $regex: payee, $options: 'i' };
+    if (paymentMethod) query.paymentMethod = paymentMethod;
+    if (paymentApp) query.paymentApp = paymentApp;
+    if (mode) query.mode = { $regex: escapeRegex(mode), $options: 'i' };
+    if (payee && !search) query.payee = { $regex: escapeRegex(payee), $options: 'i' };
     if (needsWants) query.needsWants = needsWants;
 
     if (startDate || endDate) {
@@ -161,12 +171,12 @@ router.get('/recent/:userId', async (req, res) => {
 /* QUICK FILTER: Category search */
 router.get('/category/:userId/:category', async (req, res) => {
   try {
-    const { category } = req.params;
+    const { userId, category } = req.params;
     const { limit = 50 } = req.query;
 
     const transactions = await Transaction
       .find({
-        user: req.params.userId,
+        user: userId,
         $or: [
           { category: category },
           { expenseType: category },
@@ -193,9 +203,14 @@ router.get('/category/:userId/:category', async (req, res) => {
 router.get('/suggestions/:userId', async (req, res) => {
   try {
     const { field } = req.query; // payee, expenseType, mode, etc.
+    const { userId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: 'Invalid user ID format.' });
+    }
 
     let pipeline = [
-      { $match: { user: new mongoose.Types.ObjectId(req.params.userId) } }
+      { $match: { user: new mongoose.Types.ObjectId(userId) } }
     ];
 
     if (field === 'payee') {
@@ -233,14 +248,19 @@ router.get('/suggestions/:userId', async (req, res) => {
 router.get('/analytics/:userId', async (req, res) => {
   try {
     const { months = 6 } = req.query;
+    const { userId } = req.params;
     const endDate = new Date();
     const startDate = new Date();
     startDate.setMonth(startDate.getMonth() - Number(months));
 
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: 'Invalid user ID format.' });
+    }
+
     const pipeline = [
       {
         $match: {
-          user: new mongoose.Types.ObjectId(req.params.userId),
+          user: new mongoose.Types.ObjectId(userId),
           date: { $gte: startDate, $lte: endDate }
         }
       },
@@ -264,7 +284,7 @@ router.get('/analytics/:userId', async (req, res) => {
     const categoryPipeline = [
       {
         $match: {
-          user: new mongoose.Types.ObjectId(req.params.userId),
+          user: new mongoose.Types.ObjectId(userId),
           type: { $in: ['expense', 'saved', 'credit_card_payment'] },
           date: { $gte: startDate, $lte: endDate }
         }
@@ -310,11 +330,23 @@ router.get('/summary/:userId', async (req, res) => {
 /* UPDATE */
 router.put('/:transactionId', async (req, res) => {
   try {
+    // It's a good practice to ensure the user owns the transaction they are updating.
+    // Assuming the user's ID is sent in the body.
+    const userId = req.body.user;
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required for an update.' });
+    }
+
+    // The user ID from the body is used for authorization in the query.
+    // It's good practice to remove it from the update payload to prevent it from being changed.
+    const updatePayload = { ...req.body };
+    delete updatePayload.user;
+
     const updated = await Transaction.findByIdAndUpdate(
-      req.params.transactionId,
-      req.body,
-      { new: true }
-    );
+      { _id: req.params.transactionId, user: userId },
+      updatePayload,
+      { new: true });
+
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -324,8 +356,15 @@ router.put('/:transactionId', async (req, res) => {
 /* DELETE */
 router.delete('/:transactionId', async (req, res) => {
   try {
-    await Transaction.findByIdAndDelete(req.params.transactionId);
-    res.json({ message: 'Transaction deleted' });
+    // To be fully secure, the user's ID should be passed, e.g., from an auth token.
+    // For now, we can assume it's in the request body for consistency.
+    const userId = req.body.user; 
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required for deletion.' });
+    }
+    const result = await Transaction.findOneAndDelete({ _id: req.params.transactionId, user: userId });
+    if (!result) return res.status(404).json({ error: 'Transaction not found or user not authorized.' });
+    res.status(200).json({ message: 'Transaction deleted successfully' });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

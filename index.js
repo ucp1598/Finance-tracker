@@ -8,13 +8,17 @@ const mongoose = require('mongoose');
 // Setup Express server
 const app = express();
 
+const allowedOrigins = ["http://localhost:3000", "http://localhost:3001", "https://finance-tracker-iota-puce.vercel.app"];
+
 // Enable CORS for local dev and Vercel deploy
 app.use(cors({
-  origin: [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "https://finance-tracker-iota-puce.vercel.app"
-  ],
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 
@@ -22,16 +26,13 @@ app.use(cors({
 app.use(express.json());
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+mongoose.connect(process.env.MONGODB_URI)
 .then(() => console.log('Connected to MongoDB Atlas!'))
 .catch((err) => console.error('MongoDB connection error:', err));
 
 // Add API routes
 const transactionRoutes = require('./routes/transactionRoutes');
-const accountRoutes = require('./routes/AccountRoutes');
+const accountRoutes = require('./routes/accountRoutes');
 const creditCardRoutes = require('./routes/creditCardRoutes');
 
 app.use('/api/transactions', transactionRoutes);

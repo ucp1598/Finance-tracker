@@ -1,11 +1,13 @@
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const Transaction = require("../models/Transaction");
 
 const creditCardNames = [
   "Coral GPay CC",
   "MMT Mastercard",
-  "Coral Paytm CC"
+  "Coral Paytm CC",
+  "SBI Elite VISA 8359"
   // Add any new card "mode" value here as needed
 ];
 
@@ -15,33 +17,47 @@ router.get("/summary/:userId", async (req, res, next) => {
     const { userId } = req.params;
     const { month, year } = req.query;
     const start = new Date(`${year}-${month}-01`);
-    const end = new Date(year, month, 0, 23, 59, 59, 999);
+    const end = new Date(year, Number(month), 0, 23, 59, 59, 999);
 
-    // Expenses on credit cards (type: 'expense' + card mode)
-    const spent = await Transaction.aggregate([
-      { $match: { user: userId, date: { $gte: start, $lte: end }, type: "expense", mode: { $in: creditCardNames } } },
-      { $group: { _id: "$mode", totalSpent: { $sum: "$amount" } } }
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: 'Invalid user ID format.' });
+    }
+
+    // Single aggregation pipeline for better performance
+    const summary = await Transaction.aggregate([
+      {
+        $match: {
+          user: new mongoose.Types.ObjectId(userId),
+          date: { $gte: start, $lte: end },
+          mode: { $in: creditCardNames },
+          type: { $in: ["expense", "credit_card_payment"] }
+        }
+      },
+      {
+        $group: {
+          _id: "$mode",
+          totalSpent: {
+            $sum: { $cond: [{ $eq: ["$type", "expense"] }, "$amount", 0] }
+          },
+          totalRepaid: {
+            $sum: { $cond: [{ $eq: ["$type", "credit_card_payment"] }, "$amount", 0] }
+          }
+        }
+      }
     ]);
 
-    // Repayments (type: 'credit_card_payment' + card mode)
-    const repaid = await Transaction.aggregate([
-      { $match: { user: userId, date: { $gte: start, $lte: end }, type: "credit_card_payment", mode: { $in: creditCardNames } } },
-      { $group: { _id: "$mode", totalRepaid: { $sum: "$amount" } } }
-    ]);
-
-    // Combine for output
+    // Map the results to the full list of cards
     const output = creditCardNames.map(card => {
-      const spentFound = spent.find(s => s._id === card)?.totalSpent || 0;
-      const repaidFound = repaid.find(r => r._id === card)?.totalRepaid || 0;
+      const cardData = summary.find(s => s._id === card);
       return {
         card,
-        totalSpent: spentFound,
-        totalRepaid: repaidFound,
-        balance: spentFound - repaidFound
+        totalSpent: cardData?.totalSpent || 0,
+        totalRepaid: cardData?.totalRepaid || 0,
+        balance: (cardData?.totalSpent || 0) - (cardData?.totalRepaid || 0)
       };
     });
 
-    res.json({ cards: output });
+    res.json({ cards: output, query: { month, year } });
   } catch (err) {
     next(err);
   }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import config from './config';
 
 const userId = '68d669f0d712f627d829c474';
 
@@ -11,6 +12,8 @@ function EnhancedSearch() {
     type: '',
     expenseType: '',
     mode: '',
+    paymentMethod: '',
+    paymentApp: '',
     payee: '',
     needsWants: '',
     startDate: '',
@@ -34,10 +37,14 @@ function EnhancedSearch() {
     "Needs", "Wants", "Savings", "Invested", "Fund Transfer"
   ]);
 
-  const [modes] = useState([
-    "GPay UPI", "NEFT", "Cash", "Paytm UPI", "Mobikwik UPI", "Amazon Pay UPI", 
-    "Coral GPay CC", "MMT Mastercard", "Coral Paytm CC", "Debit Card"
+  const [paymentMethods] = useState([
+    "UPI", "UPI Coral 4006", "SBI 8359", "Cash", "Coral 1007", "Coral 4006", "MMT 4005"
   ]);
+
+  const [paymentApps] = useState([
+    "CRED", "GPay", "Paytm", "Mobikwik", "Amazon", "Online Cash"
+  ]);
+
 
   // Listen for navigation events from dashboard
   useEffect(() => {
@@ -81,7 +88,7 @@ function EnhancedSearch() {
         if (formToUse[key]) params.append(key, formToUse[key]);
       });
       
-      const res = await axios.get(`http://localhost:3000/api/transactions/search/${userId}?${params}`);
+      const res = await axios.get(`${config.API_BASE_URL}/api/transactions/search/${userId}?${params}`);
       console.log('Search response:', res.data);
       setSearchResults(res.data);
     } catch (error) {
@@ -94,7 +101,7 @@ function EnhancedSearch() {
 
   const clearSearch = () => {
     setSearchForm({
-      search: '', type: '', expenseType: '', mode: '', payee: '', needsWants: '',
+      search: '', type: '', expenseType: '', mode: '', paymentMethod: '', paymentApp: '', payee: '', needsWants: '',
       startDate: '', endDate: '', minAmount: '', maxAmount: ''
     });
     setSearchResults(null);
@@ -103,7 +110,7 @@ function EnhancedSearch() {
   const handleQuickCategory = async (category) => {
     setLoading(true);
     try {
-      const res = await axios.get(`http://localhost:3000/api/transactions/category/${userId}/${category}`);
+      const res = await axios.get(`${config.API_BASE_URL}/api/transactions/category/${userId}/${category}`);
       const transactions = res.data.transactions || res.data || [];
       const count = res.data.count || transactions.length;
       const totalExpenses = res.data.totalAmount || 0;
@@ -311,20 +318,37 @@ function EnhancedSearch() {
               ))}
             </select>
 
-            <select 
-              name="mode" 
-              value={searchForm.mode} 
-              onChange={handleFormChange} 
-              style={{ 
+            <select
+              name="paymentMethod"
+              value={searchForm.paymentMethod}
+              onChange={handleFormChange}
+              style={{
                 padding: '10px',
                 border: '1px solid #d1d5db',
                 borderRadius: '6px',
                 fontSize: '0.95em'
               }}
             >
-              <option value="">All Modes</option>
-              {modes.map(mode => (
-                <option value={mode} key={mode}>{mode}</option>
+              <option value="">All Payment Methods</option>
+              {paymentMethods.map(method => (
+                <option value={method} key={method}>{method}</option>
+              ))}
+            </select>
+
+            <select
+              name="paymentApp"
+              value={searchForm.paymentApp}
+              onChange={handleFormChange}
+              style={{
+                padding: '10px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '0.95em'
+              }}
+            >
+              <option value="">All Payment Apps</option>
+              {paymentApps.map(app => (
+                <option value={app} key={app}>{app}</option>
               ))}
             </select>
           </div>
@@ -520,6 +544,7 @@ function EnhancedSearch() {
                       <td style={{ padding: '12px', fontWeight: '500' }}>{txn.payee}</td>
                       <td style={{ padding: '12px' }}>{txn.expenseType || txn.category || '—'}</td>
                       <td style={{ padding: '12px' }}>{txn.mode || '—'}</td>
+                      <td style={{ padding: '12px' }}>{txn.paymentMethod}{txn.paymentApp ? ` (${txn.paymentApp})` : ''}</td>
                       <td style={{ 
                         padding: '12px', 
                         textAlign: 'right',

@@ -3,6 +3,7 @@ import config from './config.js';
 import axios from 'axios';
 import './Dashboard.css';
 import CreditCardSummary from './components/CreditCardSummary';
+import OptionsEditor from './components/OptionsEditor';
 
 const userId = '68d669f0d712f627d829c474';
 const currentDate = new Date();
@@ -14,6 +15,8 @@ const initialFormState = {
   type: 'expense',
   mode: '',
   payee: '',
+  paymentMethod: '',
+  paymentApp: '',
   expenseType: '',
   needsWants: '',
   amount: '',
@@ -44,16 +47,35 @@ function Dashboard() {
   const [quickSearch, setQuickSearch] = useState('');
   const [quickSearchResults, setQuickSearchResults] = useState([]);
   const [showQuickResults, setShowQuickResults] = useState(false);
-  const [expenseTypes] = useState([
-    "Food", "Essentials", "Travel", "Investment", "Entertainment", "Laundry", "Saved", "Fund Transfer"
-  ]);
-  const [needsWantsOptions] = useState([
-    "Needs", "Wants", "Savings", "Invested", "Fund Transfer"
-  ]);
-  const [modes] = useState([
-    "GPay UPI", "NEFT", "Cash", "Paytm UPI", "Mobikwik UPI", "Amazon Pay UPI", 
-    "Coral GPay CC", "MMT Mastercard", "Coral Paytm CC", "Debit Card"
-  ]);
+
+  // State for editable options
+  const [expenseTypes, setExpenseTypes] = useState([]);
+  const [needsWantsOptions, setNeedsWantsOptions] = useState([]);
+  const [paymentMethods, setPaymentMethods] = useState([]);
+  const [paymentApps, setPaymentApps] = useState([]);
+
+  // State for the options editor modal
+  const [editorState, setEditorState] = useState({
+    show: false,
+    key: '',
+    title: '',
+    options: [],
+    setter: null
+  });
+
+  // Function to load options from localStorage or set defaults
+  const loadOptions = (key, defaultOptions, setter) => {
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      setter(JSON.parse(stored));
+    } else {
+      setter(defaultOptions);
+      localStorage.setItem(key, JSON.stringify(defaultOptions));
+    }
+  };
+
+  // Keep old modes for backward compatibility in dropdowns if needed, or remove
+  const [modes] = useState([]);
   const [creditCardSummary, setCreditCardSummary] = useState([]);
 
   // Helper functions
@@ -101,6 +123,12 @@ function Dashboard() {
     fetchSummary();
     fetchAccount();
     fetchCreditCardSummary();
+
+    // Load all editable options from localStorage
+    loadOptions('expenseTypes', ["Food", "Essentials", "Travel", "Investment", "Entertainment", "Laundry", "Saved", "Fund Transfer"], setExpenseTypes);
+    loadOptions('needsWantsOptions', ["Needs", "Wants", "Savings", "Invested", "Fund Transfer"], setNeedsWantsOptions);
+    loadOptions('paymentMethods', ["UPI", "UPI Coral 4006", "SBI 8359", "Cash", "Coral 1007", "Coral 4006", "MMT 4005"], setPaymentMethods);
+    loadOptions('paymentApps', ["CRED", "GPay", "Paytm", "Mobikwik", "Amazon", "Online Cash"], setPaymentApps);
   }, [month, year]);
 
   // Navigation functions
@@ -156,10 +184,37 @@ function Dashboard() {
   // Form handlers
   const handleAddFormChange = (e) => {
     const { name, value, type, checked } = e.target;
+
+    if (value === '__EDIT__') {
+      handleEditOptions(name);
+      return;
+    }
+
     setAddForm({ 
       ...addForm, 
       [name]: type === 'checkbox' ? checked : value 
     });
+  };
+
+  const handleEditOptions = (key) => {
+    const optionsMap = {
+      expenseType: { title: 'Expense Types', options: expenseTypes, setter: setExpenseTypes },
+      needsWants: { title: 'Needs/Wants', options: needsWantsOptions, setter: setNeedsWantsOptions },
+      paymentMethod: { title: 'Payment Methods', options: paymentMethods, setter: setPaymentMethods },
+      paymentApp: { title: 'Payment Apps', options: paymentApps, setter: setPaymentApps },
+    };
+    const config = optionsMap[key];
+    if (config) {
+      setEditorState({ show: true, key, ...config });
+    }
+  };
+
+  const handleSaveOptions = (key, newOptions) => {
+    const config = editorState;
+    if (config.setter) {
+      config.setter(newOptions);
+      localStorage.setItem(key, JSON.stringify(newOptions));
+    }
   };
 
   const handleAddTransaction = async (e) => {
@@ -173,11 +228,11 @@ function Dashboard() {
     try {
       const payload = { 
         ...addForm, 
-        user: userId, 
+        user: userId,
         date: addForm.date ? new Date(addForm.date) : new Date(),
         amount: Number(addForm.amount)
       };
-      await axios.post('${config.API_BASE_URL}/api/transactions/add', payload);
+      await axios.post(`${config.API_BASE_URL}/api/transactions/add`, payload);
       await fetchSummary();
       await fetchAccount();
       setAddForm(initialFormState);
@@ -195,6 +250,8 @@ function Dashboard() {
       type: txn.type,
       mode: txn.mode || '',
       payee: txn.payee,
+      paymentMethod: txn.paymentMethod || '',
+      paymentApp: txn.paymentApp || '',
       expenseType: txn.expenseType || '',
       needsWants: txn.needsWants || '',
       amount: txn.amount,
@@ -204,12 +261,23 @@ function Dashboard() {
 
   const handleEditChange = (e) => {
     const { name, value } = e.target;
+
+    if (value === '__EDIT__') {
+      handleEditOptions(name);
+      return;
+    }
+
     setEditForm({ ...editForm, [name]: value });
   };
 
   const handleEditSave = async (id) => {
     try {
-      const payload = { ...editForm, date: new Date(editForm.date), amount: Number(editForm.amount) };
+      const payload = { 
+        ...editForm, 
+        user: userId,
+        date: new Date(editForm.date), 
+        amount: Number(editForm.amount) 
+      };
       await axios.put(`${config.API_BASE_URL}/api/transactions/${id}`, payload);
       await fetchSummary();
       await fetchAccount();
@@ -245,7 +313,10 @@ function Dashboard() {
     } else {
       try {
         if (deleteTimeouts[id]) clearTimeout(deleteTimeouts[id]);
-        await axios.delete(`${config.API_BASE_URL}/api/transactions/${id}`);
+        await axios.delete(`${config.API_BASE_URL}/api/transactions/${id}`, {
+          // Send userId in the body for secure deletion on the backend
+          data: { user: userId }
+        }); 
         await fetchSummary();
         await fetchAccount();
         setEditingId(null);
@@ -268,6 +339,26 @@ function Dashboard() {
   const calculateCurrentBalance = () => {
     if (!account || !summary) return account?.currentBalance || 0;
     return account.startingBalance + summary.netFlow;
+  };
+
+  const handleBalanceFormChange = (e) => {
+    const { name, value } = e.target;
+    setBalanceForm(prev => ({ ...prev, [name]: Number(value) || 0 }));
+  };
+
+  const handleSaveBalance = async () => {
+    try {
+      const monthYear = getMonthYearString(month, year);
+      await axios.put(
+        `${config.API_BASE_URL}/api/accounts/${userId}/${monthYear}`,
+        balanceForm
+      );
+      await fetchAccount();
+      setEditingBalance(false);
+    } catch (error) {
+      console.error("Error updating balance:", error);
+      // You could add user-facing error handling here
+    }
   };
 
   // Render goal progress bar
@@ -305,6 +396,14 @@ function Dashboard() {
 
   return (
     <div className="dashboard-container">
+      <OptionsEditor
+        show={editorState.show}
+        title={editorState.title}
+        options={editorState.options}
+        onSave={(newOptions) => handleSaveOptions(editorState.key, newOptions)}
+        onClose={() => setEditorState({ ...editorState, show: false })}
+      />
+
       {/* Header */}
       <div className="dashboard-header">
         <h1 className="dashboard-title">💰 Budget Tracker</h1>
@@ -380,8 +479,33 @@ function Dashboard() {
         {account && (
           <>
             <div className="summary-card purple">
-              <div className="summary-label">Opening Balance</div>
-              <div className="summary-value">₹{account.startingBalance}</div>
+              <div className="summary-label">
+                Opening Balance
+                {!editingBalance ? (
+                  <button onClick={() => setEditingBalance(true)} className="edit-balance-button">
+                    Edit
+                  </button>
+                ) : (
+                  <button onClick={handleSaveBalance} className="edit-balance-button save">
+                    Save
+                  </button>
+                )}
+              </div>
+              {editingBalance ? (
+                <div className="summary-value-edit">
+                  <span>₹</span>
+                  <input
+                    type="number"
+                    name="startingBalance"
+                    value={balanceForm.startingBalance}
+                    onChange={handleBalanceFormChange}
+                    className="balance-input"
+                    autoFocus
+                  />
+                </div>
+              ) : (
+                <div className="summary-value">₹{account.startingBalance}</div>
+              )}
             </div>
             <div className="summary-card green">
               <div className="summary-label">Current Balance</div>
@@ -446,18 +570,32 @@ function Dashboard() {
                 {expenseTypes.map(type => (
                   <option value={type} key={type}>{type}</option>
                 ))}
+                <option value="__EDIT__" className="edit-option-trigger">-- Edit Options --</option>
               </select>
             )}
-            <select 
-              name="mode" 
-              value={addForm.mode} 
-              onChange={handleAddFormChange} 
+            <select
+              name="paymentMethod"
+              value={addForm.paymentMethod}
+              onChange={handleAddFormChange}
               className="form-select"
             >
-              <option value="">Payment Mode</option>
-              {modes.map(mode => (
-                <option value={mode} key={mode}>{mode}</option>
+              <option value="">Payment Method</option>
+              {paymentMethods.map(method => (
+                <option value={method} key={method}>{method}</option>
               ))}
+              <option value="__EDIT__" className="edit-option-trigger">-- Edit Options --</option>
+            </select>
+            <select
+              name="paymentApp"
+              value={addForm.paymentApp}
+              onChange={handleAddFormChange}
+              className="form-select"
+            >
+              <option value="">Payment App</option>
+              {paymentApps.map(app => (
+                <option value={app} key={app}>{app}</option>
+              ))}
+              <option value="__EDIT__" className="edit-option-trigger">-- Edit Options --</option>
             </select>
             <input 
               type="number" 
@@ -479,6 +617,7 @@ function Dashboard() {
                 {needsWantsOptions.map(option => (
                   <option value={option} key={option}>{option}</option>
                 ))}
+                <option value="__EDIT__" className="edit-option-trigger">-- Edit Options --</option>
               </select>
             )}
             <input 
@@ -531,9 +670,15 @@ function Dashboard() {
                           <input name="payee" value={editForm.payee} onChange={handleEditChange} className="table-cell edit-input" />
                         </td>
                         <td>
-                          <select name="mode" value={editForm.mode} onChange={handleEditChange} className="table-cell edit-input">
-                            <option value="">Mode</option>
-                            {modes.map(mode => <option value={mode} key={mode}>{mode}</option>)}
+                          <select name="paymentMethod" value={editForm.paymentMethod} onChange={handleEditChange} className="table-cell edit-input">
+                            <option value="">Method</option>
+                            {paymentMethods.map(method => <option value={method} key={method}>{method}</option>)}
+                          </select>
+                        </td>
+                        <td>
+                          <select name="paymentApp" value={editForm.paymentApp} onChange={handleEditChange} className="table-cell edit-input">
+                            <option value="">App</option>
+                            {paymentApps.map(app => <option value={app} key={app}>{app}</option>)}
                           </select>
                         </td>
                         <td>
@@ -552,7 +697,7 @@ function Dashboard() {
                       <>
                         <td>{txn.date.slice(0,10)}</td>
                         <td>{txn.payee}</td>
-                        <td>{txn.mode}</td>
+                        <td>{txn.paymentMethod}{txn.paymentApp ? ` (${txn.paymentApp})` : ''}</td>
                         <td className="amount-cell income">₹{txn.amount}</td>
                         <td>{txn.remarks}</td>
                         <td className="actions-cell">
@@ -570,7 +715,7 @@ function Dashboard() {
                 ))}
                 {(!summary.income || summary.income.length === 0) && (
                   <tr>
-                    <td colSpan="6" className="empty-state">No income transactions</td>
+                    <td colSpan="7" className="empty-state">No income transactions</td>
                   </tr>
                 )}
               </tbody>
@@ -616,12 +761,21 @@ function Dashboard() {
                           <select name="expenseType" value={editForm.expenseType} onChange={handleEditChange} className="table-cell edit-input expenses">
                             <option value="">Type</option>
                             {expenseTypes.map(type => <option value={type} key={type}>{type}</option>)}
+                            <option value="__EDIT__" className="edit-option-trigger">-- Edit --</option>
                           </select>
                         </td>
                         <td>
-                          <select name="mode" value={editForm.mode} onChange={handleEditChange} className="table-cell edit-input expenses">
-                            <option value="">Mode</option>
-                            {modes.map(mode => <option value={mode} key={mode}>{mode}</option>)}
+                          <select name="paymentMethod" value={editForm.paymentMethod} onChange={handleEditChange} className="table-cell edit-input expenses">
+                            <option value="">Method</option>
+                            {paymentMethods.map(method => <option value={method} key={method}>{method}</option>)}
+                            <option value="__EDIT__" className="edit-option-trigger">-- Edit --</option>
+                          </select>
+                        </td>
+                        <td>
+                          <select name="paymentApp" value={editForm.paymentApp} onChange={handleEditChange} className="table-cell edit-input expenses">
+                            <option value="">App</option>
+                            {paymentApps.map(app => <option value={app} key={app}>{app}</option>)}
+                            <option value="__EDIT__" className="edit-option-trigger">-- Edit --</option>
                           </select>
                         </td>
                         <td>
@@ -631,6 +785,7 @@ function Dashboard() {
                           <select name="needsWants" value={editForm.needsWants} onChange={handleEditChange} className="table-cell edit-input expenses">
                             <option value="">N/W</option>
                             {needsWantsOptions.map(option => <option value={option} key={option}>{option}</option>)}
+                            <option value="__EDIT__" className="edit-option-trigger">-- Edit --</option>
                           </select>
                         </td>
                         <td>
@@ -651,7 +806,7 @@ function Dashboard() {
                            (txn.type === 'saved' ? 'Saved' : '') ||
                            (txn.type === 'credit_card_payment' ? 'CC Payment' : 'Expense')}
                         </td>
-                        <td>{txn.mode}</td>
+                        <td>{txn.paymentMethod}{txn.paymentApp ? ` (${txn.paymentApp})` : ''}</td>
                         <td className="amount-cell expense">₹{txn.amount}</td>
                         <td>
                           <span className={`needs-wants-tag expenses ${

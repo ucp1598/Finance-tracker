@@ -264,6 +264,13 @@
   font-size: 0.9em;
 }
 
+.edit-option-trigger {
+  font-style: italic;
+  font-weight: bold;
+  background-color: #f0f0f0;
+  color: #3b82f6;
+}
+
 /* Main Layout */
 .main-grid {
   display: grid;
