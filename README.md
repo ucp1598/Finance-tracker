@@ -1,4 +1,4 @@
-# Finance Tracker Application
+# Finance Tracker
 
 A full-stack personal finance tracking application built with Node.js/Express backend and React frontend.
 
@@ -6,31 +6,31 @@ A full-stack personal finance tracking application built with Node.js/Express ba
 
 ```
 Project-Finance_Tracker/
-├── Backend (Root Directory)
-│   ├── index.js                 # Express server entry point
-│   ├── models/                  # MongoDB Mongoose models
-│   │   ├── User.js             # User model (empty - may need implementation)
-│   │   ├── Transaction.js      # Transaction model with monthly summary logic
-│   │   └── Account.js           # Bank account model
-│   ├── routes/                  # API route handlers
-│   │   ├── transactionRoutes.js # Transaction CRUD operations
-│   │   ├── accountRoutes.js     # Account management
-│   │   ├── creditCardRoutes.js # Credit card tracking
-│   │   └── userRoutes.js       # User management (empty)
-│   └── package.json            # Backend dependencies
-│
-└── finance-tracker-frontend/    # React Frontend
-    ├── src/
-    │   ├── App.js              # Main app component with navigation
-    │   ├── Dashboard.js        # Main dashboard with transaction management
-    │   ├── EnhancedSearch.js   # Advanced search functionality
-    │   ├── components/         # Reusable components
-    │   │   ├── TransactionForm.js
-    │   │   ├── SummaryCards.js
-    │   │   ├── CreditCardSummary.js
-    │   │   └── OptionsEditor.js
-    │   └── config.js           # API configuration
-    └── package.json            # Frontend dependencies
+ Backend (Root Directory)
+    index.js                 # Express server entry point
+    models/                  # MongoDB Mongoose models
+       User.js             # User model (empty - may need implementation)
+       Transaction.js      # Transaction model with monthly summary logic
+       Account.js           # Bank account model
+    routes/                  # API route handlers
+       transactionRoutes.js # Transaction CRUD operations
+       accountRoutes.js     # Account management
+       creditCardRoutes.js # Credit card tracking
+       userRoutes.js       # User management (empty)
+    package.json            # Backend dependencies
+
+ finance-tracker-frontend/    # React Frontend
+     src/
+        App.js              # Main app component with navigation
+        Dashboard.js        # Main dashboard with transaction management
+        EnhancedSearch.js   # Advanced search functionality
+        components/         # Reusable components
+           TransactionForm.js
+           SummaryCards.js
+           CreditCardSummary.js
+           OptionsEditor.js
+        config.js           # API configuration
+     package.json            # Frontend dependencies
 ```
 
 ## Features
@@ -157,4 +157,3 @@ The frontend will run on `http://localhost:3000` (or another port if 3000 is tak
 
 - Backend uses `nodemon` for auto-reload during development (`npm run dev`)
 - Frontend uses React's hot-reload feature automatically
-
