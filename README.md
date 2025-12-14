@@ -43,6 +43,11 @@ Project-Finance_Tracker/
 - **Analytics**: Spending trends and category-wise analysis
 - **Needs/Wants Classification**: Categorize expenses as Needs, Wants, Savings, or Investments
 
+<img width="1920" height="1020" alt="1" src="https://github.com/user-attachments/assets/78e59ad4-c17f-46d2-8756-a823a144c1e6" />
+
+<img width="1920" height="1020" alt="2" src="https://github.com/user-attachments/assets/e2fde4b9-d6a6-4de7-a078-549aa8f086d9" />
+
+
 ## Tech Stack
 
 ### Backend
